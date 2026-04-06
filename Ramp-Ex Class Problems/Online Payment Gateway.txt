@@ -1,0 +1,208 @@
+import java.util.UUID;
+
+class PaymentException extends Exception {
+    public PaymentException(String message) {
+        super(message);
+    }
+}
+
+
+interface PaymentMethod {
+    
+    void processPayment(double amount) throws PaymentException;
+    String getMethodDetails();
+}
+
+
+
+class CreditCard implements PaymentMethod {
+    private String cardNumber;
+    private String cardHolderName;
+    private String cvv;
+
+    public CreditCard(String cardNumber, String cardHolderName, String cvv) {
+        this.cardNumber = cardNumber;
+        this.cardHolderName = cardHolderName;
+        this.cvv = cvv;
+    }
+
+    @Override
+    public void processPayment(double amount) throws PaymentException {
+        System.out.println("Connecting to credit card network...");
+        if (cardNumber == null || cardNumber.length() != 16) {
+            throw new PaymentException("Invalid card number length. Must be 16 digits.");
+        }
+        if (cvv == null || cvv.length() != 3) {
+            throw new PaymentException("Invalid CVV. Must be 3 digits.");
+        }
+        System.out.println("Charging $" + amount + " to Credit Card for " + cardHolderName);
+    }
+
+    @Override
+    public String getMethodDetails() {
+        String maskedCard = "**** **** **** " + (cardNumber != null && cardNumber.length() >= 4 ? cardNumber.substring(cardNumber.length() - 4) : "0000");
+        return "Credit Card (" + maskedCard + ")";
+    }
+}
+
+class UPI implements PaymentMethod {
+    private String upiId;
+
+    public UPI(String upiId) {
+        this.upiId = upiId;
+    }
+
+    @Override
+    public void processPayment(double amount) throws PaymentException {
+        System.out.println("Pinging UPI network...");
+        if (upiId == null || !upiId.contains("@")) {
+            throw new PaymentException("Invalid UPI ID format. Missing '@' symbol.");
+        }
+        System.out.println("Transferring $" + amount + " from UPI ID: " + upiId);
+    }
+
+    @Override
+    public String getMethodDetails() {
+        return "UPI (" + upiId + ")";
+    }
+}
+
+
+class NetBanking implements PaymentMethod {
+    private String bankName;
+    private String username;
+
+    public NetBanking(String bankName, String username) {
+        this.bankName = bankName;
+        this.username = username;
+    }
+
+    @Override
+    public void processPayment(double amount) throws PaymentException {
+        System.out.println("Redirecting to " + bankName + " portal...");
+        if (username == null || username.isEmpty()) {
+            throw new PaymentException("Username cannot be empty.");
+        }
+        
+        if (bankName.equalsIgnoreCase("OfflineBank")) {
+            throw new PaymentException("The " + bankName + " server is currently unreachable. Try again later.");
+        }
+        System.out.println("Debiting $" + amount + " from " + bankName + " account of " + username);
+    }
+
+    @Override
+    public String getMethodDetails() {
+        return "Net Banking (" + bankName + ")";
+    }
+}
+
+
+class DigitalWallet implements PaymentMethod {
+    private String phoneNumber;
+    private double walletBalance; 
+
+    public DigitalWallet(String phoneNumber, double walletBalance) {
+        this.phoneNumber = phoneNumber;
+        this.walletBalance = walletBalance;
+    }
+
+    @Override
+    public void processPayment(double amount) throws PaymentException {
+        System.out.println("Accessing digital wallet for " + phoneNumber + "...");
+        if (amount > walletBalance) {
+            throw new PaymentException("Insufficient funds. Available balance: $" + walletBalance);
+        }
+        walletBalance -= amount; 
+        System.out.println("Paid $" + amount + ". Remaining wallet balance: $" + walletBalance);
+    }
+
+    @Override
+    public String getMethodDetails() {
+        return "Digital Wallet (" + phoneNumber + ")";
+    }
+}
+
+
+
+class Transaction {
+    private String transactionId;
+    private double amount;
+    private String status;
+    private String methodUsed;
+    private String message; 
+
+    public Transaction(double amount, String status, String methodUsed, String message) {
+        this.transactionId = UUID.randomUUID().toString().substring(0, 8); 
+        this.amount = amount;
+        this.status = status;
+        this.methodUsed = methodUsed;
+        this.message = message;
+    }
+
+    public void printReceipt() {
+        System.out.println("\n--- Transaction Receipt ---");
+        System.out.println("TXN ID : " + transactionId);
+        System.out.println("Amount : $" + amount);
+        System.out.println("Method : " + methodUsed);
+        System.out.println("Status : " + status);
+        if (status.equals("FAILED")) {
+            System.out.println("Reason : " + message); 
+        }
+        System.out.println("---------------------------\n");
+    }
+}
+
+class PaymentGateway {
+    
+    
+    public Transaction checkout(double amount, PaymentMethod method) {
+        System.out.println("Initializing secure checkout for $" + amount + "...");
+        
+        try {
+            
+            method.processPayment(amount); 
+            
+            System.out.println("✅ Payment Successful!");
+            return new Transaction(amount, "SUCCESS", method.getMethodDetails(), "Payment processed normally.");
+            
+        } catch (PaymentException e) {
+            
+            System.out.println("❌ Payment Failed!");
+            return new Transaction(amount, "FAILED", method.getMethodDetails(), e.getMessage());
+        }
+    }
+}
+
+
+
+public class Main {
+    public static void main(String[] args) {
+        PaymentGateway gateway = new PaymentGateway();
+
+        
+        System.out.println("=== Scenario 1: Net Banking Checkout ===");
+        PaymentMethod myBank = new NetBanking("Chase", "johndoe88");
+        Transaction t1 = gateway.checkout(200.00, myBank);
+        t1.printReceipt();
+
+        
+        System.out.println("=== Scenario 2: Wallet Insufficient Funds ===");
+
+        PaymentMethod myWallet = new DigitalWallet("555-0199", 50.00); 
+        
+        Transaction t2 = gateway.checkout(100.00, myWallet); 
+        t2.printReceipt();
+
+        
+        System.out.println("=== Scenario 3: Bad Credit Card Details ===");
+        PaymentMethod badCard = new CreditCard("1234", "Alice", "999");
+        Transaction t3 = gateway.checkout(75.50, badCard);
+        t3.printReceipt();
+
+        
+        System.out.println("=== Scenario 4: Bank Server Offline ===");
+        PaymentMethod offlineBank = new NetBanking("OfflineBank", "janedoe");
+        Transaction t4 = gateway.checkout(300.00, offlineBank);
+        t4.printReceipt();
+    }
+}
