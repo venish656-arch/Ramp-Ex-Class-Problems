@@ -1,0 +1,183 @@
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.Map;
+
+
+abstract class User {
+    protected String username;
+    private String passwordHash; 
+    protected boolean isLoggedIn;
+
+    public User(String username, String password) {
+        this.username = username;
+        this.passwordHash = hashPassword(password);
+        this.isLoggedIn = false;
+    }
+
+    
+    private String hashPassword(String password) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(password.getBytes());
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("Error initializing hashing algorithm", e);
+        }
+    }
+
+    public boolean checkPassword(String password) {
+        return this.passwordHash.equals(hashPassword(password));
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    
+    public abstract String getRole();
+    public abstract String[] getPermissions();
+}
+
+class Admin extends User {
+    public Admin(String username, String password) {
+        super(username, password);
+    }
+
+    @Override
+    public String getRole() {
+        return "Admin";
+    }
+
+    @Override
+    public String[] getPermissions() {
+        return new String[]{"read", "write", "delete", "manage_users"};
+    }
+}
+
+class RegularUser extends User {
+    public RegularUser(String username, String password) {
+        super(username, password);
+    }
+
+    @Override
+    public String getRole() {
+        return "User";
+    }
+
+    @Override
+    public String[] getPermissions() {
+        return new String[]{"read", "write"};
+    }
+}
+
+
+class Authenticator {
+    
+    private Map<String, User> usersDb;
+    private User currentUser;
+
+    public Authenticator() {
+        usersDb = new HashMap<>();
+        currentUser = null;
+    }
+
+    public boolean register(String username, String password, String role) {
+        if (usersDb.containsKey(username)) {
+            System.out.println("Error: Username '" + username + "' already exists.");
+            return false;
+        }
+
+        User newUser;
+        if (role.equalsIgnoreCase("admin")) {
+            newUser = new Admin(username, password);
+        } else {
+            newUser = new RegularUser(username, password);
+        }
+
+        usersDb.put(username, newUser);
+        System.out.println("Success: " + newUser.getRole() + " '" + username + "' registered successfully!");
+        return true;
+    }
+
+    public boolean login(String username, String password) {
+        if (currentUser != null) {
+            System.out.println("Error: Please logout '" + currentUser.getUsername() + "' first.");
+            return false;
+        }
+
+        User user = usersDb.get(username);
+
+        if (user != null && user.checkPassword(password)) {
+            user.isLoggedIn = true;
+            currentUser = user;
+            System.out.println("Success: Logged in as " + user.getUsername() + " (" + user.getRole() + ").");
+            return true;
+        } else {
+            System.out.println("Error: Invalid username or password.");
+            return false;
+        }
+    }
+
+    public void logout() {
+        if (currentUser != null) {
+            System.out.println("Success: User '" + currentUser.getUsername() + "' logged out.");
+            currentUser.isLoggedIn = false;
+            currentUser = null;
+        } else {
+            System.out.println("Error: No user is currently logged in.");
+        }
+    }
+
+    public void showCurrentUserInfo() {
+        if (currentUser != null) {
+            System.out.println("\n--- Current User Profile ---");
+            System.out.println("Username: " + currentUser.getUsername());
+            System.out.println("Role: " + currentUser.getRole());
+            System.out.println("Permissions: " + String.join(", ", currentUser.getPermissions()));
+            System.out.println("----------------------------\n");
+        } else {
+            System.out.println("Access Denied: You must be logged in to view profiles.");
+        }
+    }
+}
+
+
+public class Main {
+    public static void main(String[] args) {
+        Authenticator auth = new Authenticator();
+
+        System.out.println("--- 1. Registering Users ---");
+        auth.register("alice", "securepass123", "admin");
+        auth.register("bob", "mypassword", "user");
+        
+        
+        auth.register("alice", "newpass", "user");
+
+        System.out.println("\n--- 2. Testing Login & Polymorphism ---");
+        
+        auth.login("bob", "wrongpassword");
+        
+        
+        auth.login("alice", "securepass123");
+        auth.showCurrentUserInfo();
+        
+        
+        auth.login("bob", "mypassword");
+
+        System.out.println("\n--- 3. Logging out and Switching Users ---");
+        auth.logout();
+        
+        
+        auth.login("bob", "mypassword");
+        auth.showCurrentUserInfo();
+        
+        auth.logout();
+    }
+}
